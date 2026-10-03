@@ -21,8 +21,33 @@ Determine the following from the user's message:
 - **epub_cover**: Optional explicit cover image path for EPUB output
 - **export_name**: Optional filename stem for user-facing output aliases
 - **custom_instructions**: Any additional translation instructions from the user (optional)
+- **keep_original**: Enable when the user asks for "with original", "keep original", "include source text", "bilingual", "保留原文", "中英对照", or an equivalent directive (default: false). This means original-first paragraph pairs, with each translation immediately below its source paragraph, not columns.
 
 If the file path is not provided, ask the user.
+
+Resolve **original_transparency** from a percentage directive such as "80% transparency", "90% transparency", or an equivalent phrase. Default to `50%` when omitted. Accept percentages from 0 to 100; clarify an out-of-range value. An explicit `0% transparency` means **omit all original text and produce translation-only output**: set `keep_original` to false, even if the user also requests "keep original" or "with original". Resolve this override before planning the run or spawning sub-agents. For values greater than zero, the percentage controls original text transparency in bilingual output (80% = 20% opacity; 100% = fully transparent) and does not itself enable `keep_original`. Pass the resolved percentage to the build script; do not hardcode opacity in chunk files. Do not implement omission by hiding text with CSS; original text must be absent from the output content.
+
+#### Bilingual output (when `keep_original` is true)
+
+Inject this mode into every sub-agent's prompt and custom instructions. It overrides translation-only output requirements (including rule #5), but still excludes commentary:
+
+- Preserve each source paragraph's text verbatim, followed immediately by its translated paragraph. Keep paragraph boundaries and order; do not combine multiple source paragraphs into one pair or put the whole source chunk before the translation.
+- Wrap original text in `<span class="original-text">...</span>`. Use Markdown paragraphs separated by blank lines, as in the example below. Preserve inline formatting and escape literal HTML-sensitive source characters as needed so the rendered original remains unchanged. Both paragraphs must use the same paragraph style: font family, size, weight, line height, alignment, indentation, and margins. Mirror source emphasis in the corresponding translated text. The only styling difference is the original text's resolved `original_transparency` (default 50% transparency, or 50% opacity); the translation retains normal opacity and the same text color. Do not use blockquotes, italics, smaller fonts, or special spacing merely to distinguish the original.
+- For headings, use the same Markdown heading level for both the original heading (with its text wrapped in the original-text span) and the translated heading immediately below it. Within list items, blockquotes, and table cells, keep each source/translation pair inside the same structural container with matching formatting (use `<br />` between the two texts in table cells). Preserve links, code, and document structure.
+- Keep each image reference exactly once at its source position; do not duplicate images in both halves of a pair. Code blocks and other non-translatable assets also remain once.
+- Apply glossary translations to the translated text only; never replace terms in the original text. Read-only neighboring excerpts must not appear in either half.
+
+```markdown
+<span class="original-text">The rabbit looked at his watch.</span>
+
+兔子看了看他的表。
+
+<span class="original-text">Then he hurried away.</span>
+
+然后他匆匆离开了。
+```
+
+When resuming, check that existing outputs use the requested mode before planning selective re-translation. The run-state planner tracks source/glossary changes, not this output preference. If the mode changes, use a fresh temp root and carry the requested mode into the new run. Do not reuse translation-only outputs for a bilingual request or vice versa. For template-only styling changes, remove existing final artifacts before rebuilding, as documented in the README.
 
 ### 2. Preprocess — Convert to Markdown Chunks
 
@@ -141,7 +166,7 @@ Launch chunks in batches to respect API rate limits:
 
 The output file is `output_` prefixed to the source filename: `chunk0001.md` → `output_chunk0001.md`.
 
-> Translate the file `<temp_dir>/chunk<NNNN>.md` to {TARGET_LANGUAGE} and write the result to `<temp_dir>/output_chunk<NNNN>.md`. Follow the translation rules below. Output only the translated content — no commentary.
+> Translate the file `<temp_dir>/chunk<NNNN>.md` to {TARGET_LANGUAGE} and write the result to `<temp_dir>/output_chunk<NNNN>.md`. Follow the translation rules below and the requested output mode. Output only the book content (original/translation pairs when `keep_original` is true) — no commentary.
 
 Each sub-agent receives:
 - The single chunk file it is responsible for
@@ -151,6 +176,7 @@ Each sub-agent receives:
 - A per-chunk term table (see "Term table assembly" below)
 - Read-only neighboring chunk excerpts (see "Neighbor context assembly" below)
 - Any custom instructions
+- The resolved `keep_original` mode and, when enabled, the bilingual output instructions above
 
 **Term table assembly** — before spawning a sub-agent, run:
 
@@ -212,7 +238,7 @@ The meta file is read by the main agent later and merged into `glossary.json` (s
 
 #### Translation Prompt for Sub-Agents
 
-Include this translation prompt in each sub-agent's instructions (replace `{TARGET_LANGUAGE}` with the actual language name, e.g. "Chinese"):
+Include this translation prompt in each sub-agent's instructions (replace `{TARGET_LANGUAGE}` with the actual language name, e.g. "Chinese"). When `keep_original` is true, replace rule #5 with the original-first paragraph-pair requirement and inject the bilingual output instructions above into rule #12 along with any custom instructions:
 
 ---
 
@@ -386,6 +412,8 @@ python3 {baseDir}/scripts/merge_and_build.py --temp-dir "<temp_dir>" --title "<t
 
 If the user provided `epub_cover`, add `--cover "<epub_cover>"`. If the user
 provided `export_name`, add `--export-name "<export_name>"`.
+
+Pass `--original-transparency "<original_transparency>%"` using the resolved percentage, for example `--original-transparency "90%"`. The script defaults to 50% when this option is omitted. When changing transparency for an existing run, remove the existing final artifacts (`output.md`, `book*.html`, `book.docx`, `book.epub`, `book.pdf`) before rebuilding; retain the translated chunks. Existing artifacts may otherwise be reused by the build's skip logic.
 
 The `--cleanup` flag removes intermediate files (chunks, input.html, etc.) after a fully successful build. If the user asked to keep intermediates, omit `--cleanup`.
 

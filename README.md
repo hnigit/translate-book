@@ -122,6 +122,10 @@ In Claude Code, you can also use the slash command:
 
 The skill handles the full pipeline automatically — convert, chunk, translate in parallel, validate, merge, and build all output formats.
 
+For bilingual output, add "with original" or "keep original" (or an equivalent directive), for example: `translate /path/to/book.pdf to Chinese, keep original, 90% transparency`. Each original paragraph appears first, followed immediately by its translation below. Set original text transparency with a percentage directive greater than 0% and up to 100% (fully transparent); the default is 50% transparency (50% opacity). Both use the same formatting and text color, with only the original text opacity differing. Without a keep-original directive, output remains translation-only. Use a fresh temp root when switching modes on an existing run, since resume tracking does not detect this preference. For a transparency-only change, retain translated chunks, delete the existing final artifacts, and rebuild with `--original-transparency "90%"`.
+
+An explicit `0% transparency` directive omits original text entirely, overriding "keep original" or "with original". This selects translation-only output as a special override; use a fresh temp root when switching an existing bilingual run to this mode. The build option controls opacity only; the skill applies the omission during translation.
+
 ### 3. Find your outputs
 
 All files are in `{book_name}_temp/`:

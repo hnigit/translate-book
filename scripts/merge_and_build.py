@@ -591,6 +591,9 @@ def apply_template_to_html(html_content, template_file, output_file, title, lang
         full_html = full_html.replace('$lang$', lang_cfg['lang_attr'])
         full_html = full_html.replace('$body_font$', lang_cfg['font_family'])
         full_html = full_html.replace('$toc_label$', lang_cfg['toc_label'])
+        transparency = lang_cfg.get('original_transparency', 50)
+        opacity = (100 - transparency) / 100
+        full_html = full_html.replace('$original_opacity$', f'{opacity:.6f}'.rstrip('0').rstrip('.'))
 
         # Inject author meta tag into <head> so calibre_html_publish.py can extract it
         if author:
@@ -1023,6 +1026,17 @@ def export_named_aliases(temp_dir, export_name):
 # Main
 # =============================================================================
 
+def parse_transparency(value):
+    """Parse a transparency percentage from 0 to 100."""
+    try:
+        percentage = float(value.strip().removesuffix('%'))
+    except ValueError:
+        raise argparse.ArgumentTypeError('Transparency must be a percentage from 0 to 100')
+    if not 0 <= percentage <= 100:
+        raise argparse.ArgumentTypeError('Transparency must be a percentage from 0 to 100')
+    return percentage
+
+
 def main():
     parser = argparse.ArgumentParser(description='Merge translated pages and build final outputs')
     parser.add_argument('--temp-dir', required=True, help='Temp directory path')
@@ -1032,6 +1046,8 @@ def main():
     parser.add_argument('--cover', default=None, help='Cover image path for EPUB output')
     parser.add_argument('--export-name', default=None, help='Optional filename stem for exported alias copies')
     parser.add_argument('--cleanup', action='store_true', help='Remove intermediate artifacts after successful build')
+    parser.add_argument('--original-transparency', type=parse_transparency, default=50,
+                        help='Original text transparency percentage, default: 50%% (50%% opacity)')
 
     args = parser.parse_args()
     temp_dir = args.temp_dir
@@ -1060,6 +1076,7 @@ def main():
 
     lang_code = args.lang or config.get('output_lang', 'zh')
     lang_cfg = get_lang_config(lang_code)
+    lang_cfg['original_transparency'] = args.original_transparency
 
     title = args.title or config.get('original_title', 'Translated Book')
     author = args.author or config.get('creator', 'Unknown Author')

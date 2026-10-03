@@ -17,6 +17,37 @@ if str(SCRIPT_DIR) not in sys.path:
 import merge_and_build  # noqa: E402
 
 
+class OriginalTransparencyTests(unittest.TestCase):
+    def test_percentage_directives(self):
+        self.assertEqual(merge_and_build.parse_transparency('90%'), 90)
+        self.assertEqual(merge_and_build.parse_transparency('80'), 80)
+        self.assertEqual(merge_and_build.parse_transparency(' 82.5% '), 82.5)
+        for value in ('-1%', '101%', 'nan', 'inf', 'gray'):
+            with self.subTest(value=value), self.assertRaises(
+                merge_and_build.argparse.ArgumentTypeError
+            ):
+                merge_and_build.parse_transparency(value)
+
+    def test_both_templates_render_default_and_custom_opacity(self):
+        for template in ('template.html', 'template_ebook.html'):
+            for transparency, opacity in ((None, '0.5'), (90, '0.1'),
+                                          (0, '1'), (100, '0'), (82.5, '0.175')):
+                with self.subTest(template=template, transparency=transparency):
+                    config = dict(merge_and_build.get_lang_config('en'))
+                    if transparency is not None:
+                        config['original_transparency'] = transparency
+                    with tempfile.TemporaryDirectory() as temp_dir:
+                        output = Path(temp_dir) / 'book.html'
+                        body = '<p><span class="original-text">Original</span></p><p>Translation</p>'
+                        self.assertTrue(merge_and_build.apply_template_to_html(
+                            body, str(SCRIPT_DIR / template), str(output), 'Test', config
+                        ))
+                        html = output.read_text(encoding='utf-8')
+                        self.assertIn(body, html)
+                        self.assertIn(f'opacity: {opacity};', html)
+                        self.assertNotIn('$original_opacity$', html)
+
+
 class GenerateFormatTests(unittest.TestCase):
     def _write_file(self, path, content="data"):
         Path(path).write_text(content, encoding="utf-8")

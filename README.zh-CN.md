@@ -122,6 +122,10 @@ translate /path/to/book.pdf to Chinese
 
 Skill 自动处理完整流程 — 转换、拆分、并行翻译、校验、合并、生成所有输出格式。
 
+如需双语对照，添加“with original”“keep original”“保留原文”等指令，例如：`translate /path/to/book.pdf to Chinese, keep original, 90% transparency`。每个原文段落在前，译文紧接在该段原文下方。可用百分比透明度指令设置原文透明度，范围为大于 0% 至 100%（完全透明），默认 50% 透明度（50% 不透明度）。原文与译文使用相同的格式和字色，仅原文透明度不同。不提供保留原文指令时，只输出译文。在已有翻译任务中切换模式时，请使用新的 temp root，因为断点续译状态不会检测此偏好。仅修改透明度时，保留翻译后的 chunk，删除已有最终产物，再通过 `--original-transparency "90%"` 重建。
+
+明确指定 `0% transparency` 时，完全不输出原文，优先于“keep original”“with original”“保留原文”等指令。这会选择仅译文模式；将已有双语任务切换为此模式时，请使用新的 temp root。构建选项仅控制透明度，原文省略由 Skill 在翻译阶段执行。
+
 ### 3. 查看输出
 
 所有文件在 `{book_name}_temp/` 目录下：
