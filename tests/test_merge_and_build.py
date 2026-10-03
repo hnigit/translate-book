@@ -17,6 +17,7 @@ if str(SCRIPT_DIR) not in sys.path:
 import merge_and_build  # noqa: E402
 
 
+<<<<<<< HEAD
 class OriginalTransparencyTests(unittest.TestCase):
     def test_percentage_directives(self):
         self.assertEqual(merge_and_build.parse_transparency('90%'), 90)
@@ -46,6 +47,18 @@ class OriginalTransparencyTests(unittest.TestCase):
                         self.assertIn(body, html)
                         self.assertIn(f'opacity: {opacity};', html)
                         self.assertNotIn('$original_opacity$', html)
+=======
+class ConvertWithPandocTests(unittest.TestCase):
+    def test_renders_tex_math_as_mathml(self):
+        with mock.patch.object(merge_and_build.subprocess, "run") as run_mock:
+            with contextlib.redirect_stdout(io.StringIO()):
+                ok = merge_and_build.convert_with_pandoc("in.md", "out.html", "Title", "zh-CN")
+
+        self.assertTrue(ok)
+        cmd = run_mock.call_args.args[0]
+        self.assertIn("--mathml", cmd)
+        self.assertEqual(cmd[cmd.index("--to") + 1], "html5")
+>>>>>>> bd5424b82399c8e4b4cf09310f31b21a103dde7f
 
 
 class GenerateFormatTests(unittest.TestCase):

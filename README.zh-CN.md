@@ -19,6 +19,7 @@
   │
   ▼
 Calibre ebook-convert → HTMLZ → HTML → Markdown
+  （或直接输入 Markdown，例如 MinerU / Marker 的输出，绕过 Calibre）
   │
   ▼
 拆分为 chunk（chunk0001.md, chunk0002.md, ...）
@@ -45,7 +46,7 @@ Calibre ebook-convert → HTMLZ → HTML → Markdown
 - **多格式输出** — HTML（含浮动目录）、DOCX、EPUB、PDF
 - **可选输出控制** — 显式 EPUB 封面、自定义 temp root、面向用户的导出别名
 - **多语言** — zh、en、ja、ko、fr、de、es（可扩展）
-- **多格式输入** — PDF/DOCX/EPUB，Calibre 负责格式转换
+- **多格式输入** — PDF/DOCX/EPUB/Markdown，Calibre 负责格式转换；公式、表格密集的 PDF 可先用 MinerU 或 Marker 转成 Markdown
 
 ## 前置要求
 
@@ -55,6 +56,7 @@ Calibre ebook-convert → HTMLZ → HTML → Markdown
 - **Python 3**，需要：
   - `pypandoc` — 必需（`pip install pypandoc`）
   - `beautifulsoup4` — 可选，用于更好的目录生成（`pip install beautifulsoup4`）
+- **MinerU 或 Marker** — 可选，仅用于把公式、表格密集的 PDF 预先转成 Markdown（见[第一步](#第一步转换)）
 
 ## 快速开始
 
@@ -167,6 +169,20 @@ Pull request 不是首选贡献入口，可能会被关闭并转为 issue 继续
 - 尽量小的复现步骤，或可公开使用的小样本文件
 - 能说明问题的日志、截图或生成文件名
 
+## 联系方式
+
+Bug 和功能需求请按上一节的要求提 [GitHub issue](https://github.com/deusyu/translate-book/issues)。使用上的疑问、想法或其他事情，可以通过下面这些方式找到我：
+
+| 渠道 | 链接 |
+|------|------|
+| X (Twitter) | [@0xdeusyu](https://x.com/0xdeusyu) |
+| Telegram | [@DeusThink](https://t.me/DeusThink) |
+| Telegram 交流群 | [@talkdeusyu](https://t.me/talkdeusyu) |
+| Telegram 频道 | [@lovedesuyu](https://t.me/lovedesuyu) |
+| Email | [rainman.deus@gmail.com](mailto:rainman.deus@gmail.com) |
+
+频道「婴宁」记录我的见闻，以及和 AI 碰撞出的思考；交流群是它的讨论区，也欢迎来聊 translate-book。
+
 ## 流程详解
 
 ### 第一步：转换
@@ -178,6 +194,21 @@ python3 scripts/convert.py /path/to/book.pdf --olang zh
 Calibre 将输入文件转为 HTMLZ，解压后转为 Markdown，再拆分为 chunk（每个约 6000 字符）。`manifest.json` 记录每个源 chunk 的 SHA-256 hash，用于后续校验；`source_fingerprint.json` 则把 temp 目录与生成它的源文件字节绑定 — 若源文件被替换后重跑，会直接报错中止，而不是静默复用过时的 chunk。指纹机制之前创建的 temp 目录会在首次重跑时打印警告并被接管。
 
 默认工作目录是当前目录下的 `{book_name}_temp/`。如果要换父目录，可使用 `--temp-root /path/to/work`；叶子目录名仍保持 `{book_name}_temp/`。
+
+#### 公式、表格密集的 PDF：改为转换 Markdown（可选）
+
+Calibre 靠坐标启发式重排 PDF 文本，对普通正文够用，但学术、技术类 PDF 会丢失结构：公式被拆成碎片，表格被拍平成一行一个单元格，多栏版面相互交错。对这类 PDF，先用版面感知解析器转出 Markdown，再把 Markdown 交给 `convert.py`。`.md` / `.markdown` 输入完全不经过 Calibre：
+
+```bash
+pip install -U "mineru>=4.0,<5"                # 或：pip install marker-pdf
+mineru-kit parse paper.pdf -o paper.md         # MinerU >= 4（纯 CPU 的 basic 档约需 0.8 GB 模型）
+# marker_single paper.pdf --output_dir out/    # Marker：输出为 out/paper/paper.md
+python3 scripts/convert.py paper.md --olang zh
+```
+
+解析器会把公式保留为 `$...$` / `$$...$$` LaTeX，表格保留为表格。`convert.py` 会把 Markdown 旁边引用的图片复制到 `{book_name}_temp/images/`，MinerU 以 base64 内嵌的图片也会解码成文件放进去，chunk 中不会夹带图片数据。公式块（`$$ ... $$`）不会被拆到两个 chunk 中。YAML front matter（`title`、`author`、`lang`）会写入 `config.txt`，不会送去翻译；没有 front matter 时，开头的 `#` 标题作为 `original_title`。temp 目录按 Markdown 文件名命名，`paper.md` 对应 `paper_temp/`；如果该目录之前由 `paper.pdf` 生成，`convert.py` 会因源文件指纹不一致而中止，需先删除它。两个解析器首次运行都会下载模型。`--strip-page-numbers` 只对 Calibre 输入生效。
+
+生成成品时，Pandoc 会把 `$...$` / `$$...$$` 渲染为 MathML，因此 `book.html`、`book.pdf` 中的公式会被正确排版，`book.epub` 在支持 MathML 的阅读器中同样如此。Calibre 生成的 DOCX 无法排版 MathML，其中的公式会显示为压平的文本加上对应的 TeX 源码。
 
 ### 第一步半：术语表（保证全书译名一致）
 
@@ -247,7 +278,7 @@ python3 scripts/merge_and_build.py --temp-dir book_temp --title "《译后书名
 | 文件 | 用途 |
 |------|------|
 | `SKILL.md` | Agent Skill 定义 — 编排完整流程 |
-| `scripts/convert.py` | PDF/DOCX/EPUB → Markdown chunks（经 Calibre HTMLZ） |
+| `scripts/convert.py` | PDF/DOCX/EPUB → Markdown chunks（经 Calibre HTMLZ）；Markdown 输入不经过 Calibre |
 | `scripts/manifest.py` | Chunk manifest：SHA-256 追踪与合并校验 |
 | `scripts/glossary.py` | 术语表管理：为每个 chunk 生成专属术语对照表，保证全书译名一致 |
 | `scripts/chunk_context.py` | 为 subagent prompt 提供上一/下一 chunk 的只读摘录 |
@@ -268,6 +299,7 @@ python3 scripts/merge_and_build.py --temp-dir book_temp --title "《译后书名
 | `Calibre ebook-convert not found` | 安装 Calibre，确保 `ebook-convert` 在 PATH 中 |
 | `Manifest validation failed` | 源 chunk 在拆分后被修改 — 重新运行 `convert.py` |
 | `was created from different source bytes` | temp 目录属于另一个源文件 — 删除 temp 目录或换一个 `--temp-root` |
+| PDF 转换后公式、表格错乱 | 用 MinerU 或 Marker 转出 Markdown，删除旧 temp 目录，再对 `.md` 运行 `convert.py`（见[第一步](#第一步转换)） |
 | `Blank output` / `Empty output` | 某个 subagent 写出了空白或空的 chunk — 重新运行 skill 让它重译 |
 | `Missing source chunk` | 源文件被删除 — 重新运行 `convert.py` 重新生成 |
 | 翻译不完整 | 重新运行 Skill，会从中断处继续 |
